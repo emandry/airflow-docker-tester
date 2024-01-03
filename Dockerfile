@@ -43,7 +43,7 @@ RUN cd /entrypoint && wget "https://releases.hashicorp.com/consul-template/${CON
   unzip consul-template_${CONSUL_TEMPLATE_VERSION}_linux_amd64.zip && \
   rm -f consul-template_${CONSUL_TEMPLATE_VERSION}_linux_amd64.zip
   
-  
+
 COPY entrypoint.sh /entrypoint
 RUN mkdir /root/airflow && mkdir /airflow
 COPY airflow.cfg /root/airflow
@@ -51,8 +51,6 @@ RUN chmod +x /entrypoint/entrypoint.sh
 
 WORKDIR /airflow
 
-RUN mkdir /airflow/variables
-
-#ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/entrypoint/entrypoint.sh"]
 
 

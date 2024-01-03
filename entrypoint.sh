@@ -1,10 +1,15 @@
 #!/bin/bash
 
 set -e
-echo "Validating required params..."
+echo "******** Validating required params..."
+
+logToFile=" &> /var/log/entrypoint_log.txt"
+if [ -n "$DEBUG_LOG" ] && [ "$DEBUG_LOG" == "true" ]  ; then
+  logToFile=""
+fi
 
 if [ -z $USE_CONSUL ]; then
-  echo "APP_ENV is missing"
+  echo "USE_CONSUL is missing"
   exit 1
 fi
 
@@ -40,15 +45,16 @@ function readAndImportVar {
     fileContent=$(sed -e "s/{ROOT_APP_FOLDER}/$ROOT_APP_FOLDER/g" /entrypoint/$filevar.tmpl) ; echo $fileContent > /entrypoint/$filevar.tmpl
     fileContent=$(sed -e "s/{APP_ENV}/$APP_ENV/g" /entrypoint/$filevar.tmpl) ; echo $fileContent > /entrypoint/$filevar.tmpl
 
-    /entrypoint/consul-template -template="/entrypoint/$filevar.tmpl:/entrypoint/${filevar}_variable.json" -config /entrypoint/config.hcl -once -log-level info
+    eval "/entrypoint/consul-template -template="/entrypoint/$filevar.tmpl:/entrypoint/${filevar}_variable.json" -config /entrypoint/config.hcl -once -log-level info ${logToFile}"
     if ([ -f "/entrypoint/${filevar}_variable.json" ] && [[ ! -z $(grep '[^[:space:]]' "/entrypoint/${filevar}_variable.json") ]]); then
-        airflow variables import /entrypoint/${filevar}_variable.json
+        airflow variables import /entrypoint/${filevar}_variable.json 
+    else
+        echo "No variables loaded for this dag"
     fi
 }
 
-
-airflow db reset --y 
-airflow users create --role Admin --username admin --email admin --firstname admin --lastname admin --password admin
+echo "******** Creating Airflow DB..."
+eval "airflow db reset --y ${logToFile}"
 
 if ($USE_CONSUL); then
     for filevar in $(ls "$AIRFLOW_HOME/dags/"); do
@@ -59,56 +65,15 @@ if ($USE_CONSUL); then
     readAndImportVar "common"
 fi
     
+echo "******** Importing dags into Airflow"
+eval "airflow scheduler -n=1 ${logToFile}"
 
-airflow scheduler -n=1
+echo "******** List all errors in airflow import process"
 airflow dags list-import-errors
 
-# echo "******** before Import variables $file"
-
-# echo "******** before Import variables $VARIABLE_FILE"
-
-# if [ ! -z $VARIABLE_FILE ] ; then
-#     echo ">>>>>>>> Varaible llena" 
-#     if [ "find . -name variables.json" ] ; then
-#         echo "******** Import variables $VARIABLE_FILE"
-#         airflow variables import $AIRFLOW_HOME/variables/$VARIABLE_FILE
-#     fi;
-# #else
-# #   echo "ERROR: A variable file was defined an it doesn't exist"
-# #    exit 1
-# fi
-
-#  echo "******** After Import variables $file"
-
-# a=0;
-# for file in $(ls $AIRFLOW_HOME/$DAG_FOLDER/*.py); do 
-#     echo "******** Execute lint on $file"
-#     flake8  --ignore E501 $file
-#     echo "******** End of lint on $file"
-
-#     echo "******** Execute python on $file"
-#     python $file ; 
-#     if [[ $? == 1 ]] ; then
-#         a=1;
-#     fi
-#     echo "******** End python on $file"
-    
-#     echo "******** Execute  black on $file"
-#     pytest $file --black -v  -W ignore::DeprecationWarning
-#     echo "******** End of lint on $file"
-# done
-
-# if [ -z "$TESTS_FOLDER" ] ; then
-#     echo "******** Execute test on all dags in folder"
-#     pytest $AIRFLOW_HOME/$DAG_FOLDER/$TESTS_FOLDER/*.py -v -W ignore::DeprecationWarning
-#     if [[ $? == 1 ]] ; then
-#         a=1;
-#     fi
-
-#     if [[ $a == 1 ]] ; then
-#         echo "There are tests that failed"
-#     fi
-# fi
-
-exit $a
+if [ -n "$USE_WEB_PAGE" ] && [ "$USE_WEB_PAGE" == "true" ]  ; then
+  echo "******** Creating Airflow User Admin for access and staring webserver..."
+  eval "airflow users create --role Admin --username admin --email admin --firstname admin --lastname admin --password admin ${logToFile}"
+  airflow webserver
+fi
 
