@@ -1,6 +1,29 @@
 #!/bin/bash
 
 set -e
+
+export AIRFLOW_HOME="/airflow"
+export AIRFLOW_CONFIG=/root/$AIRFLOW_HOME/airflow.cfg
+export DAG_FOLDER="dags"
+
+function readAndImportVar {
+    filevar=$1
+    fileContent=$(sed -e "s|{DAG}|$filevar|g" /entrypoint/variables.tmpl) ; echo $fileContent > /entrypoint/$filevar.tmpl
+    fileContent=$(sed -e "s|{ROOT_APP_FOLDER}|$ROOT_APP_FOLDER|g" /entrypoint/$filevar.tmpl) ; echo $fileContent > /entrypoint/$filevar.tmpl
+    fileContent=$(sed -e "s|{APP_ENV}|$APP_ENV|g" /entrypoint/$filevar.tmpl) ; echo $fileContent > /entrypoint/$filevar.tmpl
+    fileContent=$(sed -e "s|{VAR_NAME}|$VAR_NAME|g" /entrypoint/$filevar.tmpl) ; echo $fileContent > /entrypoint/$filevar.tmpl
+
+    eval "/entrypoint/consul-template -template="/entrypoint/$filevar.tmpl:/entrypoint/${filevar}_variable.json" -config /entrypoint/config.hcl -once -log-level info ${logToFile}"
+    if ([ -f "/entrypoint/${filevar}_variable.json" ] && [[ ! -z $(grep '[^[:space:]]' "/entrypoint/${filevar}_variable.json") ]]); then
+        airflow variables import /entrypoint/${filevar}_variable.json 
+    else
+        echo "No variables loaded for this dag"
+    fi
+}
+
+echo "******** Creating Airflow DB..."
+eval "airflow db reset --y ${logToFile}"
+
 echo "******** Validating required params..."
 
 logToFile=" &> /var/log/entrypoint_log.txt"
@@ -33,37 +56,19 @@ if ($USE_CONSUL); then
     echo "CONSUL_HTTP_TOKEN is missing"
     exit 3
     fi
-fi
 
-export AIRFLOW_HOME="/airflow"
-export AIRFLOW_CONFIG=/root/$AIRFLOW_HOME/airflow.cfg
-export DAG_FOLDER="dags"
-
-function readAndImportVar {
-    filevar=$1
-    fileContent=$(sed -e "s/{DAG}/$filevar/g" /entrypoint/variables.tmpl) ; echo $fileContent > /entrypoint/$filevar.tmpl
-    fileContent=$(sed -e "s/{ROOT_APP_FOLDER}/$ROOT_APP_FOLDER/g" /entrypoint/$filevar.tmpl) ; echo $fileContent > /entrypoint/$filevar.tmpl
-    fileContent=$(sed -e "s/{APP_ENV}/$APP_ENV/g" /entrypoint/$filevar.tmpl) ; echo $fileContent > /entrypoint/$filevar.tmpl
-
-    eval "/entrypoint/consul-template -template="/entrypoint/$filevar.tmpl:/entrypoint/${filevar}_variable.json" -config /entrypoint/config.hcl -once -log-level info ${logToFile}"
-    if ([ -f "/entrypoint/${filevar}_variable.json" ] && [[ ! -z $(grep '[^[:space:]]' "/entrypoint/${filevar}_variable.json") ]]); then
-        airflow variables import /entrypoint/${filevar}_variable.json 
-    else
-        echo "No variables loaded for this dag"
+    if [ -z $VAR_NAME ]; then
+    echo "VAR_NAME is missing"
+    exit 3
     fi
-}
 
-echo "******** Creating Airflow DB..."
-eval "airflow db reset --y ${logToFile}"
-
-if ($USE_CONSUL); then
-    for filevar in $(ls "$AIRFLOW_HOME/dags/"); do
-        echo "******** Import variables $filevar"
-        readAndImportVar "$filevar"
-    done; 
-    echo "******** Import variables common"
-    readAndImportVar "common"
+    echo "******** Import variables $VAR_NAME"
+    readAndImportVar "$VAR_NAME"
 fi
+
+
+
+
     
 echo "******** Importing dags into Airflow"
 eval "nohup airflow scheduler -D > /var/log/scheduler_log.txt &"

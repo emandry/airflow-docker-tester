@@ -1,1 +1,1 @@
-{{ if keyExists "/{ROOT_APP_FOLDER}/{DAG}/{APP_ENV}/variables.json" }}{{ key (printf "/{ROOT_APP_FOLDER}/{DAG}/{APP_ENV}/variables.json") }}{{ end }}
+{{ if keyExists "/{ROOT_APP_FOLDER}/{APP_ENV}/{VAR_NAME}" }}{{ key (printf "/{ROOT_APP_FOLDER}/{APP_ENV}/{VAR_NAME}") }}{{ end }}
