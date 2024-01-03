@@ -66,10 +66,15 @@ if ($USE_CONSUL); then
 fi
     
 echo "******** Importing dags into Airflow"
-eval "airflow scheduler -n=1 ${logToFile}"
+eval "nohup airflow scheduler -D > /var/log/scheduler_log.txt &"
 
 echo "******** List all errors in airflow import process"
 airflow dags list-import-errors
+
+
+echo "******** List all imported DAGs"
+airflow dags list
+
 
 if [ -n "$USE_WEB_PAGE" ] && [ "$USE_WEB_PAGE" == "true" ]  ; then
   echo "******** Creating Airflow User Admin for access and staring webserver..."
