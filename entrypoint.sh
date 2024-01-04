@@ -2,10 +2,6 @@
 
 set -e
 
-export AIRFLOW_HOME="/airflow"
-export AIRFLOW_CONFIG=/root/$AIRFLOW_HOME/airflow.cfg
-export DAG_FOLDER="dags"
-
 function readAndImportVar {
     filevar=$1
     fileContent=$(sed -e "s|{DAG}|$filevar|g" /entrypoint/variables.tmpl) ; echo $fileContent > /entrypoint/$filevar.tmpl
@@ -28,38 +24,38 @@ echo "******** Validating required params..."
 
 logToFile=" &> /var/log/entrypoint_log.txt"
 if [ -n "$DEBUG_LOG" ] && [ "$DEBUG_LOG" == "true" ]  ; then
-  logToFile=""
+    ToFile=""
 fi
 
 if [ -z $USE_CONSUL ]; then
-  echo "USE_CONSUL is missing"
-  exit 1
+    echo "USE_CONSUL is missing"
+    exit 1
 fi
 
 if ($USE_CONSUL); then 
     if [ -z $APP_ENV ]; then
-    echo "APP_ENV is missing"
-    exit 1
+        echo "APP_ENV is missing"
+        exit 2
     fi
 
     if [ -z $ROOT_APP_FOLDER ]; then
-    echo "ROOT_APP_FOLDER is missing"
-    exit 1
+        echo "ROOT_APP_FOLDER is missing"
+        exit 3
     fi
 
     if [ -z $CONSUL_HTTP_ADDR ]; then
-    echo "CONSUL_HTTP_ADDR is missing"
-    exit 2
+        echo "CONSUL_HTTP_ADDR is missing"
+        exit 4
     fi
 
     if [ -z $CONSUL_HTTP_TOKEN ]; then
-    echo "CONSUL_HTTP_TOKEN is missing"
-    exit 3
+        echo "CONSUL_HTTP_TOKEN is missing"
+        exit 5
     fi
 
     if [ -z $VAR_NAME ]; then
-    echo "VAR_NAME is missing"
-    exit 3
+        echo "VAR_NAME is missing"
+        exit 6
     fi
 
     echo "******** Import variables $VAR_NAME"
@@ -67,23 +63,39 @@ if ($USE_CONSUL); then
 fi
 
 
-
+if [ -n $SECRET_FILE_NAME ] && [ -f $AIRFLOW_HOME/$SECRET_FILE_NAME ] ; then
+        jq -Rn '
+            [inputs
+            | capture("(?<key>[^=]+)=(?<value>.*)")
+            | { (.key): .value }
+            ] | add
+        ' $AIRFLOW_HOME/$SECRET_FILE_NAME > $AIRFLOW_HOME/secrets.json
+        echo "******** Import secrets from $VAR_NAME"
+        airflow variables import $AIRFLOW_HOME/secrets.json
+    else
+        echo "SECRET_FILE_NAME is declared and file is missing"
+        exit 6
+fi
 
     
 echo "******** Importing dags into Airflow"
 eval "nohup airflow scheduler -D > /var/log/scheduler_log.txt &"
 
+echo " "
+echo "******** List all imported DAGs"
+airflow dags list
+echo " "
+
 echo "******** List all errors in airflow import process"
 airflow dags list-import-errors
 
 
-echo "******** List all imported DAGs"
-airflow dags list
+
 
 
 if [ -n "$USE_WEB_PAGE" ] && [ "$USE_WEB_PAGE" == "true" ]  ; then
-  echo "******** Creating Airflow User Admin for access and staring webserver..."
-  eval "airflow users create --role Admin --username admin --email admin --firstname admin --lastname admin --password admin ${logToFile}"
-  airflow webserver
+    echo "******** Creating Airflow User Admin for access and staring webserver..."
+    eval "airflow users create --role Admin --username admin --email admin --firstname admin --lastname admin --password admin ${logToFile}"
+    airflow webserver
 fi
 

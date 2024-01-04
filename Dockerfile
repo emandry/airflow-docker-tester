@@ -23,7 +23,7 @@ RUN apk add --no-cache \
         py3-pybind11 \
         py3-pybind11-dev \
         py3-virtualenv \
-        geos wget libc++ libc++-dev re2-dev re2 geos-dev ca-certificates
+        geos wget libc++ libc++-dev re2-dev re2 geos-dev ca-certificates jq
         
 #RUN apk add --no-cache wget libc++ libc++-dev re2-dev re2 geos-dev ca-certificates
 
@@ -48,6 +48,10 @@ COPY entrypoint.sh /entrypoint
 RUN mkdir /root/airflow && mkdir /airflow
 COPY airflow.cfg /root/airflow
 RUN chmod +x /entrypoint/entrypoint.sh 
+
+ENV AIRFLOW_HOME="/airflow" 
+ENV AIRFLOW_CONFIG=/root/$AIRFLOW_HOME/airflow.cfg 
+ENV DAG_FOLDER="dags"
 
 WORKDIR /airflow
 
